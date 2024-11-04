@@ -1,9 +1,8 @@
 import pandas as pd
 import re
 import logging
-from matplotlib.pyplot import plt
+import matplotlib.pyplot as plt
 from preprocessors.preprocessor import Preprocessor
-
 class InfoMessageCleaner(Preprocessor):
     def __init__(self) -> None:
         super().__init__()
@@ -38,6 +37,8 @@ class InfoMessageCleaner(Preprocessor):
         self.logger.info("Preprocess data")
         self.check_info(dataframe)
         self.transform_info_message(dataframe)
+        self.logger.info("Save the data")
+        dataframe.to_csv("./DBtrainrides_info_message_cleanded.csv")
 
     def visualize_statistics(self, df):
         mean_delay = df.groupby("transformed_info_message")["arrival_delay_m"].mean()
