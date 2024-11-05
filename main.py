@@ -29,6 +29,7 @@ def df_converter(df):
 
     return df
 
+
 if __name__ == "__main__":
     # Preprocessing steps
     train_df = pd.read_csv("exploded_stations.csv")

@@ -1,5 +1,6 @@
 import logging
 
+
 class Preprocessor:
     def __init__(self, name="Preprocessor") -> None:
         # Set up the logger with the given name
