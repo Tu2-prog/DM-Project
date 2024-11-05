@@ -6,16 +6,10 @@ import matplotlib.pyplot as plt
 import logging
 from preprocessors.preprocessor import Preprocessor
 
+
 class TrainTypeClassifier(Preprocessor):
-    def __init__(self) -> None:
-        super().__init__()
-
-    def __init__(self, name) -> None:
-        super().__init__()
-        logging.basicConfig()
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.INFO)
-
+    def __init__(self, name="TrainTypeClassifier") -> None:
+        super().__init__(name)
 
     def categorize_line(self, line):
         if pd.isnull(line) or line.strip() == '':
@@ -28,7 +22,7 @@ class TrainTypeClassifier(Preprocessor):
             return 'RE/RB Prefix'
         else:
             return 'Other Prefix'
-        
+
     def determine_line_prefix(self, df):
         df['line_prefix'] = df['line'].str.extract(r'^([A-Za-z]+)', expand=False)
 
@@ -108,7 +102,7 @@ class TrainTypeClassifier(Preprocessor):
             return row['line_category']
         else:
             return row['train_type']
-        
+
     def transform_df(self, dataframe):
         self.logger.info("Preprocess data")
         dataframe['line_category'] = dataframe['line'].apply(self.categorize_line)
@@ -122,17 +116,18 @@ class TrainTypeClassifier(Preprocessor):
         dataframe['lat'] = pd.to_numeric(dataframe['lat'], errors='coerce')
         dataframe = dataframe.dropna(subset=['long', 'lat'])
         dataframe = dataframe.sort_values(by=['route_id', 'departure_time', 'station_number'])
-        
+
         self.logger.info("Compute Final Train Type")
         grouped_dataframe = dataframe.groupby(['route_id', 'departure_time']).apply(self.compute_average_distance)
         grouped_dataframe[['route_id', 'departure_time', 'avg_distance_between_stops']].drop_duplicates()
-        grouped_dataframe['train_type'] = grouped_dataframe['avg_distance_between_stops'].apply(self.classify_train_type)
+        grouped_dataframe['train_type'] = grouped_dataframe['avg_distance_between_stops'].apply(
+            self.classify_train_type)
         grouped_dataframe['final_train_type'] = grouped_dataframe.apply(self.final_classification, axis=1)
 
         # The plot already exists in this repository in directory plots so only execute this when necessary
         # self.logger.info("Plot avg distance per stope")
         # self.visualize_distance_distribution(grouped_dataframe)
-        
+
         self.logger.info("Split grouped data and save it")
         # Create a DataFrame for Regional Trains
         df_regional_train = grouped_dataframe[grouped_dataframe['final_train_type'] == 'Regional Train'].copy()
@@ -145,7 +140,8 @@ class TrainTypeClassifier(Preprocessor):
         df_tram.to_csv('./trams.csv', index=False)
 
     def visualize_distance_distribution(self, df):
-        avg_distances = df[['route_id', 'departure_time', 'avg_distance_between_stops']].drop_duplicates()['avg_distance_between_stops']
+        avg_distances = df[['route_id', 'departure_time', 'avg_distance_between_stops']].drop_duplicates()[
+            'avg_distance_between_stops']
 
         plt.figure(figsize=(10, 6))
         plt.hist(avg_distances, bins=100)
