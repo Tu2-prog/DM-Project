@@ -1,9 +1,9 @@
-import pandas as pd
-import numpy as np
-from math import radians, sin, cos, sqrt, atan2
 from datetime import datetime
+
+import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
-import logging
+
 from preprocessors.preprocessor import Preprocessor
 
 
@@ -26,24 +26,6 @@ class TrainTypeClassifier(Preprocessor):
     def determine_line_prefix(self, df):
         df['line_prefix'] = df['line'].str.extract(r'^([A-Za-z]+)', expand=False)
 
-    def parse_id(self, id_str):
-        if pd.isnull(id_str):
-            return None, None, None
-        parts = id_str.split('-')
-        if len(parts) == 3:
-            route_id = parts[0]
-            departure_time_str = parts[1]
-            station_number = parts[2]
-        elif len(parts) == 4 and parts[0] == '':
-            # This is when route_id starts with a minus sign
-            route_id = '-' + parts[1]
-            departure_time_str = parts[2]
-            station_number = parts[3]
-        else:
-            # ID does not conform to expected pattern
-            return None, None, None
-        return route_id, departure_time_str, station_number
-
     def parse_departure_time(self, departure_time_str):
         if not isinstance(departure_time_str, str) or len(departure_time_str) != 10:
             return None
@@ -58,38 +40,44 @@ class TrainTypeClassifier(Preprocessor):
             dt = None
         return dt
 
-    def haversine_distance(self, lat1, lon1, lat2, lon2):
-        # Convert latitude and longitude from degrees to radians
-        R = 6371  # Earth radius in kilometers
-        phi1 = radians(lat1)
-        phi2 = radians(lat2)
-        delta_phi = radians(lat2 - lat1)
-        delta_lambda = radians(lon2 - lon1)
-        # Compute haversine formula
-        a = sin(delta_phi / 2.0) ** 2 + \
-            cos(phi1) * cos(phi2) * sin(delta_lambda / 2.0) ** 2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        distance = R * c
-        return distance  # Distance in kilometers
+    def haversine_vectorised(self, lat1, lon1, lat2, lon2):
+        # Earth radius in kilometres
+        R = 6371
+        # Convert degrees to radians
+        lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
 
-    def compute_average_distance(self, group):
-        group = group.sort_values('station_number')
-        # Compute distances between consecutive stops
-        latitudes = group['lat'].values
-        longitudes = group['long'].values
-        distances = []
-        for i in range(len(group) - 1):
-            lat1, lon1 = latitudes[i], longitudes[i]
-            lat2, lon2 = latitudes[i + 1], longitudes[i + 1]
-            distance = self.haversine_distance(lat1, lon1, lat2, lon2)
-            distances.append(distance)
-        # Calculate average distance
-        if distances:
-            avg_distance = np.mean(distances)
-        else:
-            avg_distance = 0  # Only one stop in the journey
-        group['avg_distance_between_stops'] = avg_distance
-        return group
+        # Vectorised haversine calculation
+        delta_lat = lat2 - lat1
+        delta_lon = lon2 - lon1
+        a = np.sin(delta_lat / 2.0) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(delta_lon / 2.0) ** 2
+        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
+        return R * c
+
+    def compute_average_distance(self, dataframe):
+        # Calculate average distances for each group without apply
+        dataframe['lat_next'] = dataframe.groupby(['ID_Base', 'departure_time'])['lat'].shift(-1)
+        dataframe['long_next'] = dataframe.groupby(['ID_Base', 'departure_time'])['long'].shift(-1)
+
+        # Filter rows with missing next coordinates
+        mask = dataframe['lat_next'].notna() & dataframe['long_next'].notna()
+
+        # Calculate distances
+        dataframe['distance'] = 0  # Default distance as zero
+        dataframe.loc[mask, 'distance'] = self.haversine_vectorised(
+            dataframe.loc[mask, 'lat'].values,
+            dataframe.loc[mask, 'long'].values,
+            dataframe.loc[mask, 'lat_next'].values,
+            dataframe.loc[mask, 'long_next'].values,
+        )
+
+        # Calculate average distance per group
+        avg_distances = dataframe.groupby(['ID_Base', 'departure_time'])['distance'].transform('mean')
+        dataframe['avg_distance_between_stops'] = avg_distances
+
+        # Drop temporary columns
+        dataframe.drop(columns=['lat_next', 'long_next', 'distance'], inplace=True)
+
+        return dataframe
 
     def classify_train_type(self, avg_distance, threshold=3):
         if avg_distance <= threshold:
@@ -107,40 +95,34 @@ class TrainTypeClassifier(Preprocessor):
         self.logger.info("Preprocess data")
         dataframe['line_category'] = dataframe['line'].apply(self.categorize_line)
         self.determine_line_prefix(dataframe)
-        dataframe[['route_id', 'departure_time_str', 'station_number']] = dataframe['ID'].apply(
-            lambda x: pd.Series(self.parse_id(x))
-        )
-        dataframe['departure_time'] = dataframe['departure_time_str'].apply(self.parse_departure_time)
-        dataframe['station_number'] = pd.to_numeric(dataframe['station_number'], errors='coerce')
-        dataframe['long'] = pd.to_numeric(dataframe['long'], errors='coerce')
-        dataframe['lat'] = pd.to_numeric(dataframe['lat'], errors='coerce')
+        dataframe['departure_time'] = dataframe['ID_Timestamp'].apply(self.parse_departure_time)
+
+        # Drop rows with missing coordinates and sort by necessary columns
         dataframe = dataframe.dropna(subset=['long', 'lat'])
-        dataframe = dataframe.sort_values(by=['route_id', 'departure_time', 'station_number'])
+        dataframe = dataframe.sort_values(by=['ID_Base', 'departure_time', 'stop_number'])
 
+        # Compute average distances for each group without groupby-apply
         self.logger.info("Compute Final Train Type")
-        grouped_dataframe = dataframe.groupby(['route_id', 'departure_time']).apply(self.compute_average_distance)
-        grouped_dataframe[['route_id', 'departure_time', 'avg_distance_between_stops']].drop_duplicates()
-        grouped_dataframe['train_type'] = grouped_dataframe['avg_distance_between_stops'].apply(
-            self.classify_train_type)
-        grouped_dataframe['final_train_type'] = grouped_dataframe.apply(self.final_classification, axis=1)
+        dataframe = self.compute_average_distance(dataframe)
 
-        # The plot already exists in this repository in directory plots so only execute this when necessary
-        # self.logger.info("Plot avg distance per stope")
-        # self.visualize_distance_distribution(grouped_dataframe)
+        # Remove duplicates before classification
+        dataframe = dataframe.drop_duplicates(subset=['ID_Base', 'departure_time', 'avg_distance_between_stops'])
+        dataframe['train_type'] = dataframe['avg_distance_between_stops'].apply(self.classify_train_type)
+        dataframe['final_train_type'] = dataframe.apply(self.final_classification, axis=1)
 
+        # Save grouped data for inspection
         self.logger.info("Split grouped data and save it")
-        # Create a DataFrame for Regional Trains
-        df_regional_train = grouped_dataframe[grouped_dataframe['final_train_type'] == 'Regional Train'].copy()
-
-        # Create a DataFrame for Trams
-        df_tram = grouped_dataframe[grouped_dataframe['final_train_type'] == 'Tram'].copy()
-
-        # Save dataframes for later inspection
+        df_regional_train = dataframe[dataframe['final_train_type'] == 'Regional Train'].copy()
+        df_tram = dataframe[dataframe['final_train_type'] == 'Tram'].copy()
         df_regional_train.to_csv('./regional_trains.csv', index=False)
         df_tram.to_csv('./trams.csv', index=False)
 
+        # The plot already exists in this repository in directory plots so only execute this when necessary
+        self.logger.info("Plot avg distance per stope")
+        self.visualize_distance_distribution(dataframe)
+
     def visualize_distance_distribution(self, df):
-        avg_distances = df[['route_id', 'departure_time', 'avg_distance_between_stops']].drop_duplicates()[
+        avg_distances = df[['ID_Base', 'departure_time', 'avg_distance_between_stops']].drop_duplicates()[
             'avg_distance_between_stops']
 
         plt.figure(figsize=(10, 6))

@@ -1,17 +1,14 @@
-import pandas as pd
 import re
-import logging
-import matplotlib.pyplot as plt
-from preprocessors.preprocessor import Preprocessor
-class InfoMessageCleaner(Preprocessor):
-    def __init__(self) -> None:
-        super().__init__()
 
-    def __init__(self, name) -> None:
-        super().__init__()
-        logging.basicConfig()
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.INFO)
+import matplotlib.pyplot as plt
+import pandas as pd
+
+from preprocessors.preprocessor import Preprocessor
+
+
+class InfoMessageCleaner(Preprocessor):
+    def __init__(self, name="InfoMessageCleaner") -> None:
+        super().__init__(name)
 
     def check_info(self, df):
         """Checks if an info message is present and produces a boolean attribute for the dataframe."""
@@ -32,13 +29,15 @@ class InfoMessageCleaner(Preprocessor):
     def compute_statistics(self, df):
         """Computes matrix for statistics in terms of relation between a present info and a potential delay."""
         return df.groupby(['info_present', 'arrival_delay_check']).size().unstack(fill_value=0)
-    
+
     def transform_df(self, dataframe):
         self.logger.info("Preprocess data")
         self.check_info(dataframe)
         self.transform_info_message(dataframe)
         self.logger.info("Save the data")
         dataframe.to_csv("./DBtrainrides_info_message_cleanded.csv")
+
+        return dataframe
 
     def visualize_statistics(self, df):
         mean_delay = df.groupby("transformed_info_message")["arrival_delay_m"].mean()
@@ -52,4 +51,3 @@ class InfoMessageCleaner(Preprocessor):
         plt.tight_layout()  # Adjust layout to make room for labels
         plt.savefig("./plots/avg-delay-per-message.png")
         plt.clf()
-      
