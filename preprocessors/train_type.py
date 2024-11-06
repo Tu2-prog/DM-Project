@@ -106,7 +106,7 @@ class TrainTypeClassifier(Preprocessor):
         dataframe = self.compute_average_distance(dataframe)
 
         # Remove duplicates before classification
-        dataframe = dataframe.drop_duplicates(subset=['ID_Base', 'departure_time', 'avg_distance_between_stops'])
+        # dataframe = dataframe.drop_duplicates(subset=['ID_Base', 'departure_time', 'avg_distance_between_stops'])
         dataframe['train_type'] = dataframe['avg_distance_between_stops'].apply(self.classify_train_type)
         dataframe['final_train_type'] = dataframe.apply(self.final_classification, axis=1)
 
@@ -118,7 +118,7 @@ class TrainTypeClassifier(Preprocessor):
         df_tram.to_csv('./trams.csv', index=False)
 
         # The plot already exists in this repository in directory plots so only execute this when necessary
-        self.logger.info("Plot avg distance per stope")
+        self.logger.info("Plot avg distance per stop")
         self.visualize_distance_distribution(dataframe)
 
     def visualize_distance_distribution(self, df):
