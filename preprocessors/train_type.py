@@ -126,7 +126,7 @@ class TrainTypeClassifier(Preprocessor):
         dataframe["final_train_type"] = dataframe.apply(
             self.final_classification, axis=1
         )
-        dataframe.drop(["train_type", "line_prefix", "last_station"])
+        dataframe.drop(["train_type", "line_prefix", "last_station"], axis=1)
         # Save grouped data for inspection
         dataframe.to_csv("DBtrainrides_final_train_type.csv")
         self.logger.info("Split grouped data and save it")

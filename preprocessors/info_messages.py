@@ -40,7 +40,7 @@ class InfoMessageCleaner(Preprocessor):
         self.logger.info("Preprocess data")
         self.check_info(dataframe)
         self.transform_info_message(dataframe)
-        dataframe.drop("info")
+        dataframe.drop("info", axis=1)
         self.logger.info("Save the data")
         dataframe.to_csv("DBtrainrides_info_cleaned.csv", index=False)
 
