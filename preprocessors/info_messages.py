@@ -15,7 +15,7 @@ class InfoMessageCleaner(Preprocessor):
 
         df["info_present"] = False
         for index, row in df.iterrows():
-            if pd.notna(row['info']):
+            if pd.notna(row["info"]):
                 df.at[index, "info_present"] = True
 
     def transform_info_message(self, df):
@@ -24,18 +24,25 @@ class InfoMessageCleaner(Preprocessor):
         df["transformed_info_message"] = "No message"
         for index, row in df.iterrows():
             if pd.notna(row["info"]):
-                df.at[index, "transformed_info_message"] = re.sub(r'\.\s*\(.*?\)', '', row["info"])
+                df.at[index, "transformed_info_message"] = re.sub(
+                    r"\.\s*\(.*?\)", "", row["info"]
+                )
 
     def compute_statistics(self, df):
         """Computes matrix for statistics in terms of relation between a present info and a potential delay."""
-        return df.groupby(['info_present', 'arrival_delay_check']).size().unstack(fill_value=0)
+        return (
+            df.groupby(["info_present", "arrival_delay_check"])
+            .size()
+            .unstack(fill_value=0)
+        )
 
     def transform_df(self, dataframe):
         self.logger.info("Preprocess data")
         self.check_info(dataframe)
         self.transform_info_message(dataframe)
+        dataframe.drop("info")
         self.logger.info("Save the data")
-        dataframe.to_csv("./info_cleaned.csv", index=False)
+        dataframe.to_csv("DBtrainrides_info_cleaned.csv", index=False)
 
         return dataframe
 
@@ -43,11 +50,11 @@ class InfoMessageCleaner(Preprocessor):
         mean_delay = df.groupby("transformed_info_message")["arrival_delay_m"].mean()
 
         plt.figure(figsize=(10, 6))
-        mean_delay.plot(kind='bar', color='skyblue')
+        mean_delay.plot(kind="bar", color="skyblue")
         plt.xlabel("Transformed Info Message")
         plt.ylabel("Average Arrival Delay (minutes)")
         plt.title("Average Arrival Delay by Transformed Info Message")
-        plt.xticks(rotation=45, ha='right')  # Rotate x-axis labels if needed
+        plt.xticks(rotation=45, ha="right")  # Rotate x-axis labels if needed
         plt.tight_layout()  # Adjust layout to make room for labels
         plt.savefig("./plots/avg-delay-per-message.png")
         plt.clf()
