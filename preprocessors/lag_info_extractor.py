@@ -10,33 +10,17 @@ class LagInfoExtractor(Preprocessor):
 
     def convert_df(self, df):
         # Convert 'station_number' to numeric
-        df['station_number'] = pd.to_numeric(df['station_number'], errors='coerce')
+        df["stop_number"] = pd.to_numeric(df["stop_number"], errors="coerce")
 
         # Convert 'arrival_plan' and 'departure_plan' to datetime
-        df['arrival_plan'] = pd.to_datetime(df['arrival_plan'])
-        df['departure_plan'] = pd.to_datetime(df['departure_plan'])
+        df["arrival_plan"] = pd.to_datetime(df["arrival_plan"])
+        df["departure_plan"] = pd.to_datetime(df["departure_plan"])
 
         # Ensure 'arrival_delay_m' and 'departure_delay_m' are numeric
-        df['arrival_delay_m'] = pd.to_numeric(df['arrival_delay_m'], errors='coerce')
-        df['departure_delay_m'] = pd.to_numeric(df['departure_delay_m'], errors='coerce')
-
-    def parse_id(self, id_str):
-        if pd.isnull(id_str):
-            return None, None, None
-        parts = id_str.split("-")
-        if len(parts) == 3:
-            route_id = parts[0]
-            departure_time_str = parts[1]
-            station_number = parts[2]
-        elif len(parts) == 4 and parts[0] == "":
-            # This is when route_id starts with a minus sign
-            route_id = "-" + parts[1]
-            departure_time_str = parts[2]
-            station_number = parts[3]
-        else:
-            # ID does not conform to expected pattern
-            return None, None, None
-        return route_id, departure_time_str, station_number
+        df["arrival_delay_m"] = pd.to_numeric(df["arrival_delay_m"], errors="coerce")
+        df["departure_delay_m"] = pd.to_numeric(
+            df["departure_delay_m"], errors="coerce"
+        )
 
     def parse_departure_time(self, departure_time_str):
         if not isinstance(departure_time_str, str) or len(departure_time_str) != 10:
@@ -65,7 +49,7 @@ class LagInfoExtractor(Preprocessor):
         return group
 
     def calculate_distance_features_vectorized(self, group):
-        group = group.sort_values("station_number")
+        group = group.sort_values("stop_number")
         latitudes = group["lat"].values
         longitudes = group["long"].values
         R = 6371  # Earth radius in kilometers
@@ -113,9 +97,6 @@ class LagInfoExtractor(Preprocessor):
     def transform(self, dataframe):
         self.logger.info("Starting data preprocessing pipeline")
         self.logger.info("Parse the id")
-        dataframe[["route_id", "departure_time_str", "station_number"]] = dataframe[
-            "ID"
-        ].apply(lambda x: pd.Series(self.parse_id(x)))
         self.convert_df(dataframe)
         dataframe = self._preprocess_data(dataframe)
         dataframe = self._add_previous_station_data(dataframe)
@@ -132,11 +113,11 @@ class LagInfoExtractor(Preprocessor):
     def _preprocess_data(self, dataframe):
         """Preprocesses initial data columns and sorting."""
         self.logger.info("Preprocess data")
-        dataframe["departure_time"] = dataframe["departure_time_str"].apply(
+        dataframe["departure_time"] = dataframe["ID_Timestamp"].apply(
             self.parse_departure_time
         )
         dataframe = dataframe.sort_values(
-            by=['route_id', 'departure_time', 'station_number']
+            by=["ID_Base", "departure_time", "stop_number"]
         )
         return dataframe
 
@@ -144,12 +125,12 @@ class LagInfoExtractor(Preprocessor):
         """Adds delay information from previous stations."""
         self.logger.info("Incorporate data from Previous Stations")
         dataframe["prev_arrival_delay_m"] = (
-            dataframe.groupby(['route_id', 'departure_time'])["arrival_delay_m"]
+            dataframe.groupby(["ID_Base", "departure_time"])["arrival_delay_m"]
             .shift(1)
             .fillna(0)
         )
         dataframe["prev_departure_delay_m"] = (
-            dataframe.groupby(["route_id", "departure_time"])["departure_delay_m"]
+            dataframe.groupby(["ID_Base", "departure_time"])["departure_delay_m"]
             .shift(1)
             .fillna(0)
         )
@@ -159,14 +140,14 @@ class LagInfoExtractor(Preprocessor):
         """Calculates weighted delay, cumulative delay, and delay gain."""
         self.logger.info("Calculate Average Weighted Delay from previous stops")
         dataframe = dataframe.groupby(
-            ["route_id", "departure_time"], group_keys=False
+            ["ID_Base", "departure_time"], group_keys=False
         ).apply(self.calculate_weighted_avg_delay_vectorized)
 
         dataframe["cumulative_delay"] = dataframe.groupby(
-            ["route_id", "departure_time"]
+            ["ID_Base", "departure_time"]
         )["arrival_delay_m"].cumsum()
         dataframe["delay_gain"] = (
-            dataframe.groupby(["route_id", "departure_time"])["cumulative_delay"]
+            dataframe.groupby(["ID_Base", "departure_time"])["cumulative_delay"]
             .diff()
             .fillna(0)
         )
@@ -175,17 +156,17 @@ class LagInfoExtractor(Preprocessor):
     def _calculate_station_progress(self, dataframe):
         """Calculates progress through stations and the ratio of station progress."""
         dataframe["max_station_number"] = dataframe.groupby(
-            ["route_id", "departure_time"]
-        )["station_number"].transform("max")
+            ["ID_Base", "departure_time"]
+        )["stop_number"].transform("max")
         dataframe["station_progress"] = (
-            dataframe["station_number"] / dataframe["max_station_number"]
+            dataframe["stop_number"] / dataframe["max_station_number"]
         )
         return dataframe
 
     def _calculate_time_progress(self, dataframe):
         """Calculates time-based progress ratios."""
         dataframe["origin_departure_plan"] = dataframe.groupby(
-            ["route_id", "departure_time"]
+            ["ID_Base", "departure_time"]
         )["departure_plan"].transform("first")
 
         dataframe["planned_elapsed_time"] = (
@@ -193,7 +174,7 @@ class LagInfoExtractor(Preprocessor):
         ).dt.total_seconds() / 60  # in minutes
 
         dataframe["total_planned_time"] = (
-            dataframe.groupby(["route_id", "departure_time"])["arrival_plan"].transform(
+            dataframe.groupby(["ID_Base", "departure_time"])["arrival_plan"].transform(
                 "last"
             )
             - dataframe["origin_departure_plan"]
@@ -204,7 +185,7 @@ class LagInfoExtractor(Preprocessor):
         )
 
         dataframe["next_arrival_plan"] = dataframe.groupby(
-            ["route_id", "departure_time"]
+            ["ID_Base", "departure_time"]
         )["arrival_plan"].shift(-1)
         dataframe["planned_travel_time_to_next_stop"] = (
             dataframe["next_arrival_plan"] - dataframe["departure_plan"]
@@ -222,7 +203,7 @@ class LagInfoExtractor(Preprocessor):
         """Calculates distance-based progress ratios and filters out NaN location data."""
         dataframe = dataframe.dropna(subset=["long", "lat"])
         dataframe = dataframe.groupby(
-            ["route_id", "departure_time"], group_keys=False
+            ["ID_Base", "departure_time"], group_keys=False
         ).apply(self.calculate_distance_features_vectorized)
 
         dataframe["distance_progress"] = dataframe["distance_from_origin"] / dataframe[
