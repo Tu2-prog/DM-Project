@@ -126,7 +126,6 @@ class TrainTypeClassifier(Preprocessor):
         dataframe["final_train_type"] = dataframe.apply(
             self.final_classification, axis=1
         )
-        dataframe.drop(["train_type", "line_prefix", "last_station"], axis=1)
         # Save grouped data for inspection
         dataframe.to_csv("DBtrainrides_final_train_type.csv")
         self.logger.info("Split grouped data and save it")
@@ -136,10 +135,10 @@ class TrainTypeClassifier(Preprocessor):
         df_tram = dataframe[dataframe["final_train_type"] == "Tram"].copy()
         df_regional_train.to_csv("./regional_trains.csv", index=False)
         df_tram.to_csv("./trams.csv", index=False)
-
         # The plot already exists in this repository in directory plots so only execute this when necessary
         self.logger.info("Plot avg distance per stop")
         self.visualize_distance_distribution(dataframe)
+        return dataframe
 
     def visualize_distance_distribution(self, df):
         avg_distances = df[

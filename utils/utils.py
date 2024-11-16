@@ -33,3 +33,6 @@ def df_converter(df):
         df[column] = pd.to_datetime(df[column])
 
     return df
+
+def clean_up_df(df, columns):
+    return df.drop(columns=columns)

@@ -48,6 +48,7 @@ class LagInfoExtractor(Preprocessor):
         group["weighted_avg_prev_delay"] = weighted_avg_prev
         return group
 
+    # Optimized function to calculate distance features without for loops
     def calculate_distance_features_vectorized(self, group):
         group = group.sort_values("stop_number")
         latitudes = group["lat"].values
@@ -94,128 +95,100 @@ class LagInfoExtractor(Preprocessor):
 
         return group
 
-    def transform(self, dataframe):
-        self.logger.info("Starting data preprocessing pipeline")
-        self.logger.info("Parse the id")
-        self.convert_df(dataframe)
-        dataframe = self._preprocess_data(dataframe)
-        dataframe = self._add_previous_station_data(dataframe)
-        dataframe = self._calculate_delays_and_progress(dataframe)
-        dataframe = self._calculate_station_progress(dataframe)
-        dataframe = self._calculate_time_progress(dataframe)
-        dataframe = self._calculate_distance_progress(dataframe)
-        dataframe = self._add_city_delay_feature(dataframe)
-
-        self.logger.info("Data transformation complete")
-        dataframe.to_csv("DBtrainrides_optimized.csv")
-        return dataframe
-
-    def _preprocess_data(self, dataframe):
-        """Preprocesses initial data columns and sorting."""
+    def transform(self, df):
         self.logger.info("Preprocess data")
-        dataframe["departure_time"] = dataframe["ID_Timestamp"].apply(
-            self.parse_departure_time
-        )
-        dataframe = dataframe.sort_values(
-            by=["ID_Base", "departure_time", "stop_number"]
-        )
-        return dataframe
+        df["departure_time"] = df["ID_Timestamp"].apply(self.parse_departure_time)
+        self.convert_df(df)
+        df = df.sort_values(by=["ID_Base", "ID_Timestamp", "stop_number"])
+        df.reset_index(drop=True, inplace=True)
+        # Group the data by journey
+        df["prev_arrival_delay_m"] = df.groupby(["ID_Base", "departure_time"])[
+            "arrival_delay_m"
+        ].shift(1)
+        df["prev_departure_delay_m"] = df.groupby(["ID_Base", "departure_time"])[
+            "departure_delay_m"
+        ].shift(1)
 
-    def _add_previous_station_data(self, dataframe):
-        """Adds delay information from previous stations."""
-        self.logger.info("Incorporate data from Previous Stations")
-        dataframe["prev_arrival_delay_m"] = (
-            dataframe.groupby(["ID_Base", "departure_time"])["arrival_delay_m"]
-            .shift(1)
-            .fillna(0)
+        # Replace NaN values (which occur at the first station) with 0
+        df["prev_arrival_delay_m"] = df["prev_arrival_delay_m"].fillna(0)
+        df["prev_departure_delay_m"] = df["prev_departure_delay_m"].fillna(0)
+        df = df.groupby(["ID_Base", "departure_time"], group_keys=False).apply(
+            self.calculate_weighted_avg_delay_vectorized
         )
-        dataframe["prev_departure_delay_m"] = (
-            dataframe.groupby(["ID_Base", "departure_time"])["departure_delay_m"]
-            .shift(1)
-            .fillna(0)
-        )
-        return dataframe
-
-    def _calculate_delays_and_progress(self, dataframe):
-        """Calculates weighted delay, cumulative delay, and delay gain."""
-        self.logger.info("Calculate Average Weighted Delay from previous stops")
-        dataframe = dataframe.groupby(
-            ["ID_Base", "departure_time"], group_keys=False
-        ).apply(self.calculate_weighted_avg_delay_vectorized)
-
-        dataframe["cumulative_delay"] = dataframe.groupby(
-            ["ID_Base", "departure_time"]
-        )["arrival_delay_m"].cumsum()
-        dataframe["delay_gain"] = (
-            dataframe.groupby(["ID_Base", "departure_time"])["cumulative_delay"]
+        df["cumulative_delay"] = df.groupby(["ID_Base", "departure_time"])[
+            "arrival_delay_m"
+        ].cumsum()
+        # Calculate the gain in delay over stations
+        df["delay_gain"] = (
+            df.groupby(["ID_Base", "departure_time"])["cumulative_delay"]
             .diff()
             .fillna(0)
         )
-        return dataframe
+        df["max_station_number"] = df.groupby(["ID_Base", "departure_time"])[
+            "stop_number"
+        ].transform("max")
 
-    def _calculate_station_progress(self, dataframe):
-        """Calculates progress through stations and the ratio of station progress."""
-        dataframe["max_station_number"] = dataframe.groupby(
-            ["ID_Base", "departure_time"]
-        )["stop_number"].transform("max")
-        dataframe["station_progress"] = (
-            dataframe["stop_number"] / dataframe["max_station_number"]
-        )
-        return dataframe
+        # Calculate the ratio of current station number to max station number
+        df["station_progress"] = df["stop_number"] / df["max_station_number"]
+        df["origin_departure_plan"] = df.groupby(["ID_Base", "departure_time"])[
+            "departure_plan"
+        ].transform("first")
 
-    def _calculate_time_progress(self, dataframe):
-        """Calculates time-based progress ratios."""
-        dataframe["origin_departure_plan"] = dataframe.groupby(
-            ["ID_Base", "departure_time"]
-        )["departure_plan"].transform("first")
-
-        dataframe["planned_elapsed_time"] = (
-            dataframe["arrival_plan"] - dataframe["origin_departure_plan"]
+        # Calculate planned elapsed time since departure from origin station
+        df["planned_elapsed_time"] = (
+            df["arrival_plan"] - df["origin_departure_plan"]
         ).dt.total_seconds() / 60  # in minutes
 
-        dataframe["total_planned_time"] = (
-            dataframe.groupby(["ID_Base", "departure_time"])["arrival_plan"].transform(
-                "last"
-            )
-            - dataframe["origin_departure_plan"]
+        # Calculate total planned time for the journey
+        df["total_planned_time"] = (
+            df.groupby(["ID_Base", "departure_time"])["arrival_plan"].transform("last")
+            - df["origin_departure_plan"]
         ).dt.total_seconds() / 60  # in minutes
 
-        dataframe["time_progress"] = (
-            dataframe["planned_elapsed_time"] / dataframe["total_planned_time"]
-        )
+        # Calculate ratio of elapsed time to total time
+        df["time_progress"] = df["planned_elapsed_time"] / df["total_planned_time"]
 
-        dataframe["next_arrival_plan"] = dataframe.groupby(
-            ["ID_Base", "departure_time"]
-        )["arrival_plan"].shift(-1)
-        dataframe["planned_travel_time_to_next_stop"] = (
-            dataframe["next_arrival_plan"] - dataframe["departure_plan"]
+        # Calculate planned travel time to the next stop
+        df["next_arrival_plan"] = df.groupby(["ID_Base", "departure_time"])[
+            "arrival_plan"
+        ].shift(-1)
+        df["planned_travel_time_to_next_stop"] = (
+            df["next_arrival_plan"] - df["departure_plan"]
         ).dt.total_seconds() / 60  # in minutes
 
-        dataframe["progress_ratio"] = dataframe["station_progress"] / dataframe[
-            "time_progress"
-        ].replace({0: np.nan})
-        dataframe["progress_ratio"] = (
-            dataframe["progress_ratio"].replace([np.inf, -np.inf], np.nan).fillna(0)
+        # Calculate the ratio of station progress to time progress (progress_ratio = station_progress / time_progress)
+        df["progress_ratio"] = df["station_progress"] / df["time_progress"].replace(
+            {0: np.nan}
         )
-        return dataframe
 
-    def _calculate_distance_progress(self, dataframe):
-        """Calculates distance-based progress ratios and filters out NaN location data."""
-        dataframe = dataframe.dropna(subset=["long", "lat"])
-        dataframe = dataframe.groupby(
-            ["ID_Base", "departure_time"], group_keys=False
-        ).apply(self.calculate_distance_features_vectorized)
+        # Handle infinite or NaN values
+        df["progress_ratio"] = (
+            df["progress_ratio"].replace([np.inf, -np.inf], np.nan).fillna(0)
+        )
 
-        dataframe["distance_progress"] = dataframe["distance_from_origin"] / dataframe[
+        df["long"] = pd.to_numeric(df["long"], errors="coerce")
+        df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
+
+        # Remove entries with missing coordinates
+        df = df.dropna(subset=["long", "lat"])
+
+        df = df.groupby(["ID_Base", "departure_time"], group_keys=False).apply(
+            self.calculate_distance_features_vectorized
+        )
+
+        # Calculate ratio of distance from origin to total distance
+        df["distance_progress"] = df["distance_from_origin"] / df[
             "total_distance"
         ].replace({0: np.nan})
-        dataframe["distance_progress"] = (
-            dataframe["distance_progress"].replace([np.inf, -np.inf], np.nan).fillna(0)
-        )
-        return dataframe
 
-    def _add_city_delay_feature(self, dataframe):
-        """Adds the average city delay as a new feature."""
-        city_avg_delay = dataframe.groupby("city")["arrival_delay_m"].transform("mean")
-        dataframe["avg_city_delay"] = city_avg_delay
-        return dataframe
+        # Handle infinite or NaN values
+        df["distance_progress"] = (
+            df["distance_progress"].replace([np.inf, -np.inf], np.nan).fillna(0)
+        )
+        city_avg_delay = df.groupby("city")["arrival_delay_m"].transform("mean")
+
+        # Add the average city delay as a feature
+        df["avg_city_delay"] = city_avg_delay
+        self.logger.info("Finalize preprocessing")
+        df.to_csv("DBtrainrides_optimized.csv")
+        return df
