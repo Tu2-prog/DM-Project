@@ -139,7 +139,7 @@ class PathExploder(Preprocessor):
 
         self.logger.info("Save the data")
         exploded_stations_df_with_ibnr_time_df.to_csv(
-            "DBtrainrides_exploded_stations.csv"
+            "DBtrainrides_exploded_stations.csv", index=False
         )
         self.logger.info("Finalize the preprocessing")
         return exploded_stations_df_with_ibnr_time_df

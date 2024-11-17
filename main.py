@@ -21,5 +21,5 @@ if __name__ == "__main__":
     train_df = train_type_cf.transform_df(train_df)
     
     train_df = clean_up_df(train_df, ["info", "line_prefix", "train_type", "last_station", "city"])
-    train_df.to_csv("DBtrainrides_final_result.csv")
+    train_df.to_csv("DBtrainrides_final_result.csv", index=False)
     # Code for training

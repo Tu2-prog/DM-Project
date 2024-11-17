@@ -190,5 +190,5 @@ class LagInfoExtractor(Preprocessor):
         # Add the average city delay as a feature
         df["avg_city_delay"] = city_avg_delay
         self.logger.info("Finalize preprocessing")
-        df.to_csv("DBtrainrides_optimized.csv")
+        df.to_csv("DBtrainrides_optimized.csv", index=False)
         return df

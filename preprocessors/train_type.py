@@ -127,7 +127,7 @@ class TrainTypeClassifier(Preprocessor):
             self.final_classification, axis=1
         )
         # Save grouped data for inspection
-        dataframe.to_csv("DBtrainrides_final_train_type.csv")
+        dataframe.to_csv("DBtrainrides_final_train_type.csv", index=False)
         self.logger.info("Split grouped data and save it")
         df_regional_train = dataframe[
             dataframe["final_train_type"] == "Regional Train"
