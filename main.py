@@ -5,14 +5,14 @@ from utils.utils import df_converter, clean_up_df
 
 if __name__ == "__main__":
     # Preprocessing steps
-    train_df = pd.read_csv("DBtrainrides.csv")
+    train_df = pd.read_csv("DBtrainrides_restored_lat_long.csv")
 
-    path_exploder = path_exploder.PathExploder()
-    train_df = path_exploder.transform(train_df)
+    # path_exploder = path_exploder.PathExploder()
+    # train_df = path_exploder.transform(train_df)
     train_df = df_converter(train_df)
 
-    cleaner = info_messages.InfoMessageCleaner()
-    train_df = cleaner.transform_df(train_df)
+    # cleaner = info_messages.InfoMessageCleaner()
+    # train_df = cleaner.transform_df(train_df)
 
     lag_info_extractor = lag_info_extractor.LagInfoExtractor()
     train_df = lag_info_extractor.transform(train_df)

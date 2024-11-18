@@ -135,15 +135,10 @@ class LagInfoExtractor(Preprocessor):
         ].transform("first")
 
         # Calculate planned elapsed time since departure from origin station
-        df["planned_elapsed_time"] = (
-            df["arrival_plan"] - df["origin_departure_plan"]
-        ).dt.total_seconds() / 60  # in minutes
+        df['planned_elapsed_time'] = (df['arrival_plan'] - df['departure_time']).dt.total_seconds() / 60  # in minutes
 
         # Calculate total planned time for the journey
-        df["total_planned_time"] = (
-            df.groupby(["ID_Base", "departure_time"])["arrival_plan"].transform("last")
-            - df["origin_departure_plan"]
-        ).dt.total_seconds() / 60  # in minutes
+        df['total_planned_time'] = (df.groupby(['ID_Base', 'departure_time'])['arrival_plan'].transform('last') - df['departure_time']).dt.total_seconds() / 60  # in minutes
 
         # Calculate ratio of elapsed time to total time
         df["time_progress"] = df["planned_elapsed_time"] / df["total_planned_time"]
