@@ -36,3 +36,8 @@ def df_converter(df):
 
 def clean_up_df(df, columns):
     return df.drop(columns=columns)
+
+def filter_canceled(df):
+    df = df[df["canceled"] == False]
+    df = df.drop(columns=["canceled"])
+    return df
