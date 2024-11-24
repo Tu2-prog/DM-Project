@@ -1,5 +1,5 @@
 import pandas as pd
-
+import numpy as np
 
 def df_converter(df):
     # Convert specified columns to desired types
@@ -89,7 +89,22 @@ def normalize_dates(df):
     df = df.dropna(subset=['arrival_plan', 'departure_plan'])
     # Replace naN values in targets with 0 because they are all coming from the first stop of a train ride (others are filtered out above):
     df["arrival_delay_m"]= df["arrival_delay_m"].fillna(0)
-
+    df = df.astype({"IBNR": "float"})
     # Replace strange NaN in IBNR, long and lat
     df["IBNR"] = df["IBNR"].fillna(0.0)
     return df
+
+def custom_train_test_split(df, target_column, train_size):
+    target = df["arrival_delay_m"]
+    unique_base_ids = df['ID_Base'].unique()
+    shuffled_ids = np.random.permutation(unique_base_ids)
+    split_index = int(train_size * len(shuffled_ids))
+    base_ids_80 = shuffled_ids[:split_index]  # 80% of Base_IDs
+    base_ids_20 = shuffled_ids[split_index:]  # 20% of Base_IDs
+    X_train = df[df['ID_Base'].isin(base_ids_80)]
+    X_test = df[df['ID_Base'].isin(base_ids_20)]
+    y_train = X_train[target_column]
+    y_test = X_test[target_column] 
+    X_train = X_train.drop(columns=["arrival_delay_m", "transformed_info_message","arrival_plan","departure_plan"])
+    X_test = X_test.drop(columns=["arrival_delay_m", "transformed_info_message","arrival_plan","departure_plan"])
+    return X_train, y_train, X_test, y_test
