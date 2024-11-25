@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
     train_df = clean_up_df(train_df, columns)
     train_df = filter_canceled(train_df)
-    mesage_order = ["No message", "Information", "Bauarbeiten", "Störung", "Großstörung"]
-    train_df = ordinal_scaling(train_df, "transformed_info_message", "info_label_encoded", mesage_order)
+    message_order = ["No message", "Information", "Bauarbeiten", "Störung", "Großstörung"]
+    train_df = ordinal_scaling(train_df, "transformed_info_message", "info_label_encoded", message_order)
     train_df = normalize_dates(train_df)
-    train_df.to_csv("DBtrainrides_final_result.csv", index=False)
+    train_df.to_csv("DBtrainrides_complete_preprocessed_2.csv", index=False)

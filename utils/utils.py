@@ -97,6 +97,7 @@ def normalize_dates(df):
 def custom_train_test_split(df, target_column, train_size):
     target = df["arrival_delay_m"]
     unique_base_ids = df['ID_Base'].unique()
+    np.random.seed(42)
     shuffled_ids = np.random.permutation(unique_base_ids)
     split_index = int(train_size * len(shuffled_ids))
     base_ids_80 = shuffled_ids[:split_index]  # 80% of Base_IDs

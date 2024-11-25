@@ -30,6 +30,7 @@ class GeoEncoder(Preprocessor):
         return row
 
     def transform(self, df):
+        self.logger.info("Start Preprocessing")
         self.logger.info("Load European IBNR data")
         df.loc[df['stop_number'] == 1, 'IBNR'] = df['starting_station_IBNR']
         df = df.astype({"IBNR": "float"})
@@ -57,7 +58,7 @@ class GeoEncoder(Preprocessor):
             df.loc[chunk.index, 'lat'] = df.loc[chunk.index, 'lat'].fillna(merged_chunk['lat_european_train_stations'])
             df.loc[chunk.index, 'long'] = df.loc[chunk.index, 'long'].fillna(merged_chunk['long_european_train_stations'])
 
-        self.logger.info("Retrived missing coordinates")
+        self.logger.info("Retrieved missing coordinates")
         df.to_csv("DBtrainrides_replaced_missing_coordinates.csv", index=False)
 
         preprocessed_df = pd.read_csv("station_coordinates_final_manually_updated.csv")
@@ -99,6 +100,6 @@ class GeoEncoder(Preprocessor):
         combined_df_all_rides = pd.concat([df, final_result_df])
 
         final_result_df_all_rides = combined_df_all_rides.drop_duplicates(subset=['ID_Base', 'ID_Timestamp', 'stop_number'])
-
+        self.logger.info("Finalize Preprocessing")
         final_result_df_all_rides.to_csv("DBtrainrides_restored_lat_long.csv",index=False)
         return final_result_df_all_rides
