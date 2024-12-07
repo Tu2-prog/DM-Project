@@ -37,4 +37,6 @@ The data can be downloaded from the following links:
 
 These csv files can be used to execute the preprocessing pipeline.
 
-The Python version used here was **3.11.3**, however for the baseline_regression_tree please use **3.8**.
+For the baseline it is important that they do not require the finer transformations of transforming the 
+
+The Python version used here was **3.8.20**.
