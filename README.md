@@ -40,3 +40,9 @@ These csv files can be used to execute the preprocessing pipeline.
 For the baseline it is important that they do not require the finer transformations of transforming the 
 
 The Python version used here was **3.8.20**.
+
+# Authors and Contributors
+Anh Tu Duong Nguyen
+Raphael Ebner
+Adrian Scheibelhut
+Georgios Terzidis
