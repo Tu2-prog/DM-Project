@@ -42,7 +42,7 @@ For the baseline it is important that they do not require the finer transformati
 The Python version used here was **3.8.20**.
 
 # Authors and Contributors
-Anh Tu Duong Nguyen
-Raphael Ebner
-Adrian Scheibelhut
-Georgios Terzidis
+* Anh Tu Duong Nguyen
+* Raphael Ebner
+* Adrian Scheibelhut
+* Georgios Terzidis
